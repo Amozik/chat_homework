@@ -20,9 +20,10 @@ public class Client : MonoBehaviour
     private int _connectionID;
 
     private bool _isConnected = false;
-    private byte error;
+    private string _playerName;
+    private byte _error;
 
-    public void Connect()
+    public void Connect(string playerName)
     {
         if (_isConnected)
             return;
@@ -36,19 +37,22 @@ public class Client : MonoBehaviour
         HostTopology topology = new HostTopology(cc, MAX_CONNECTION);
         
         _hostID = NetworkTransport.AddHost(topology, _port);        
-        _connectionID = NetworkTransport.Connect(_hostID, "127.0.0.1", _serverPort, 0, out error);
+        _connectionID = NetworkTransport.Connect(_hostID, "127.0.0.1", _serverPort, 0, out _error);
 
-        if ((NetworkError)error == NetworkError.Ok)
+        if ((NetworkError) _error == NetworkError.Ok)
+        {
             _isConnected = true;
+            _playerName = playerName == "" ? _connectionID.ToString() : playerName;
+        }
         else
-            Debug.Log((NetworkError)error);
+            Debug.Log((NetworkError)_error);
     }
 
     public void Disconnect()
     {
         if (!_isConnected) return;
 
-        NetworkTransport.Disconnect(_hostID, _connectionID, out error);
+        NetworkTransport.Disconnect(_hostID, _connectionID, out _error);
         _isConnected = false;
     }
         
@@ -63,13 +67,14 @@ public class Client : MonoBehaviour
         var recBuffer = new byte[1024];
         var bufferSize = 1024;
         int dataSize;
-        NetworkEventType recData = NetworkTransport.Receive(out recHostId, out connectionId, out channelId, recBuffer, bufferSize, out dataSize, out error);
+        NetworkEventType recData = NetworkTransport.Receive(out recHostId, out connectionId, out channelId, recBuffer, bufferSize, out dataSize, out _error);
 
         while (recData != NetworkEventType.Nothing)
         {
             switch (recData)
             {
                 case NetworkEventType.ConnectEvent:
+                    SendMessage(_playerName);
                     OnMessageReceive?.Invoke($"You have been connected to server.");
                     Debug.Log($"You have been connected to server.");
                     break;
@@ -90,15 +95,15 @@ public class Client : MonoBehaviour
                     break;
             }
 
-            recData = NetworkTransport.Receive(out recHostId, out connectionId, out channelId, recBuffer, bufferSize, out dataSize, out error);
+            recData = NetworkTransport.Receive(out recHostId, out connectionId, out channelId, recBuffer, bufferSize, out dataSize, out _error);
         }
     }
 
     public void SendMessage(string message)
     {
         var buffer = Encoding.Unicode.GetBytes(message);
-        NetworkTransport.Send(_hostID, _connectionID, _reliableChannel, buffer, message.Length * sizeof(char), out error);
-        if ((NetworkError)error != NetworkError.Ok) 
-            Debug.Log((NetworkError)error);
+        NetworkTransport.Send(_hostID, _connectionID, _reliableChannel, buffer, message.Length * sizeof(char), out _error);
+        if ((NetworkError)_error != NetworkError.Ok) 
+            Debug.Log((NetworkError)_error);
     }
 }

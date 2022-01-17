@@ -16,7 +16,7 @@ public class Server : MonoBehaviour
     private bool _isStarted;
     private byte _error;
 
-    List<int> _connectionIDs = new List<int>();
+    Dictionary<int, string> _connectionIDs = new Dictionary<int, string>();
 
     public void StartServer()
     {        
@@ -46,6 +46,7 @@ public class Server : MonoBehaviour
         byte[] recBuffer = new byte[1024];
         int bufferSize = 1024;
         int dataSize;
+        string playerName;
         NetworkEventType recData = NetworkTransport.Receive(out recHostId, out connectionId, out channelId, recBuffer, bufferSize, out dataSize, out _error);
 
         while (recData != NetworkEventType.Nothing)
@@ -56,7 +57,7 @@ public class Server : MonoBehaviour
                     break;
 
                 case NetworkEventType.ConnectEvent:
-                    _connectionIDs.Add(connectionId);
+                    _connectionIDs.Add(connectionId, "");
 
                     SendMessageToAll($"Player {connectionId} has connected.");
                     Debug.Log($"Player {connectionId} has connected.");
@@ -65,15 +66,30 @@ public class Server : MonoBehaviour
                 case NetworkEventType.DataEvent:
                     string message = Encoding.Unicode.GetString(recBuffer, 0, dataSize);
 
-                    SendMessageToAll($"Player {connectionId}: {message}");
-                    Debug.Log($"Player {connectionId}: {message}");
+                    if (_connectionIDs.TryGetValue(connectionId, out playerName))
+                    {
+                        if (playerName == "")
+                        {
+                            _connectionIDs[connectionId] = message == "" ? connectionId.ToString() : message;
+                        }
+                        else
+                        {
+                            SendMessageToAll($"{playerName}: {message}");
+                            Debug.Log($"{playerName}: {message}");
+                        }
+                    }
+                    
                     break;
 
                 case NetworkEventType.DisconnectEvent:
-                    _connectionIDs.Remove(connectionId);
+                    if (_connectionIDs.TryGetValue(connectionId, out playerName))
+                    {
+                        _connectionIDs.Remove(connectionId);
 
-                    SendMessageToAll($"Player {connectionId} has disconnected.");
-                    Debug.Log($"Player {connectionId} has disconnected.");
+                        SendMessageToAll($"{playerName} has disconnected.");
+                        Debug.Log($"{playerName} has disconnected.");
+                    }
+
                     break;
 
                 case NetworkEventType.BroadcastEvent:
@@ -106,28 +122,30 @@ public class Server : MonoBehaviour
 
     public void SendMessageToAll(string message)
     {
-        for (int i = 0; i < _connectionIDs.Count; i++)        
-            SendMessage(message, _connectionIDs[i]);        
+        foreach (var connectionID in _connectionIDs.Keys)
+        {
+            SendMessage(message, connectionID);
+        }
     }
 }
 
-public interface Message
-{
-    short messageId { get; }
-}
+    public interface Message
+    {
+        short messageId { get; }
+    }
 
-public class MyMessage: Message
-{
-    public string data;
-    public int number;
+    public class MyMessage: Message
+    {
+        public string data;
+        public int number;
 
-    public short messageId => 0;
-}
+        public short messageId => 0;
+    }
 
-public class TheirMessage: Message
-{
-    public bool success;
-    public int number;
+    public class TheirMessage: Message
+    {
+        public bool success;
+        public int number;
 
-    public short messageId => 2;
-}
+        public short messageId => 2;
+    }
