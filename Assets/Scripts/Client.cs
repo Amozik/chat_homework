@@ -2,12 +2,15 @@ using System;
 using System.Text;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
+using Messages;
 using UnityEngine;
 using UnityEngine.Networking;
 
 public class Client : MonoBehaviour
 {
     public event Action<string> OnMessageReceive;
+    public event Action<IMessage> OnTypedMessageReceive;
 
     private const int MAX_CONNECTION = 10;
 
@@ -80,6 +83,12 @@ public class Client : MonoBehaviour
                     break;
 
                 case NetworkEventType.DataEvent:
+                    // if (TryDeserializeMessage(recBuffer, dataSize, out var typedMessage))
+                    // {
+                    //     OnTypedMessageReceive?.Invoke(typedMessage);
+                    //     break;
+                    // }
+                    
                     string message = Encoding.Unicode.GetString(recBuffer, 0, dataSize);
                     OnMessageReceive?.Invoke(message);
                     Debug.Log(message);
@@ -96,6 +105,29 @@ public class Client : MonoBehaviour
             }
 
             recData = NetworkTransport.Receive(out recHostId, out connectionId, out channelId, recBuffer, bufferSize, out dataSize, out _error);
+        }
+    }
+
+    private bool TryDeserializeMessage(byte[] buffer, int size, out IMessage message)
+    {
+        var messageIdBytes = new byte[2];
+        var messageBytes = new byte[buffer.Length - 2];
+        Array.Copy(buffer, 0, messageIdBytes, 0, messageIdBytes.Length);
+        Array.Copy(messageBytes, 2, messageBytes, 0, messageIdBytes.Length);
+        short messageId = BitConverter.ToInt16(messageIdBytes, 0);
+        var messageString = Encoding.Unicode.GetString(messageBytes, 0, size - sizeof(short));
+        
+        switch (messageId)
+        {
+            case 2: 
+                message = JsonUtility.FromJson<ResponseMessage>(messageString);
+                return true;
+            case 3:
+                message = JsonUtility.FromJson<PlayerMessage>(messageString);
+                return true;
+            default:
+                message = null;
+                return false;
         }
     }
 

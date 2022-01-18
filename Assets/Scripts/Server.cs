@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
+using Messages;
 using UnityEngine;
 using UnityEngine.Networking;
 
@@ -61,6 +63,13 @@ public class Server : MonoBehaviour
 
                     SendMessageToAll($"Player {connectionId} has connected.");
                     Debug.Log($"Player {connectionId} has connected.");
+                    
+                    // var testMessage = new PlayerMessage()
+                    // {
+                    //     Name = "Palka",
+                    //     ConnectionId = connectionId,
+                    // };
+                    // SendMessage(testMessage, connectionId);
                     break;
 
                 case NetworkEventType.DataEvent:
@@ -112,10 +121,25 @@ public class Server : MonoBehaviour
         Debug.Log($"Server {_hostID} has stopped");
     }
 
+    public void SendMessage<T>(T message, int connectionID) where T: IMessage
+    {
+        var json = JsonUtility.ToJson(message);
+        var buffer = BitConverter.GetBytes(message.MessageId);
+        buffer = buffer.Concat(Encoding.Unicode.GetBytes(json)).ToArray();
+        var size = sizeof(short) + json.Length * sizeof(char);
+        SendBytes(buffer, size, connectionID);
+    }
+
     public void SendMessage(string message, int connectionID)
     {
         byte[] buffer = Encoding.Unicode.GetBytes(message);
-        NetworkTransport.Send(_hostID, connectionID, _reliableChannel, buffer, message.Length * sizeof(char), out _error);
+        SendBytes(buffer, message.Length * sizeof(char), connectionID);
+    }
+
+    public void SendBytes(byte[] buffer, int size,  int connectionID)
+    {
+        //var byteLength = Buffer.ByteLength(buffer);
+        NetworkTransport.Send(_hostID, connectionID, _reliableChannel, buffer, size, out _error);
         if ((NetworkError)_error != NetworkError.Ok)
             Debug.Log((NetworkError)_error);
     }
@@ -125,27 +149,6 @@ public class Server : MonoBehaviour
         foreach (var connectionID in _connectionIDs.Keys)
         {
             SendMessage(message, connectionID);
-        }
+        } 
     }
 }
-
-    public interface Message
-    {
-        short messageId { get; }
-    }
-
-    public class MyMessage: Message
-    {
-        public string data;
-        public int number;
-
-        public short messageId => 0;
-    }
-
-    public class TheirMessage: Message
-    {
-        public bool success;
-        public int number;
-
-        public short messageId => 2;
-    }
