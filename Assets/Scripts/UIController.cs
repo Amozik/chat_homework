@@ -1,4 +1,3 @@
-
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -22,6 +21,9 @@ public class UIController : MonoBehaviour
     private TMP_InputField _inputField;
     
     [SerializeField]
+    private TMP_InputField _nameField;
+    
+    [SerializeField]
     private TextField _textField;
 
     [SerializeField]
@@ -31,12 +33,12 @@ public class UIController : MonoBehaviour
 
     private void Start()
     {
-        _buttonStartServer.onClick.AddListener(() => StartServer());
-        _buttonShutDownServer.onClick.AddListener(() => ShutDownServer());
-        _buttonConnectClient.onClick.AddListener(() => Connect());
-        _buttonDisconnectClient.onClick.AddListener(() => Disconnect());
-        _buttonSendMessage.onClick.AddListener(() => SendMessage());
-        _inputField.onEndEdit.AddListener((text) =>SendMessage());
+        _buttonStartServer.onClick.AddListener(StartServer);
+        _buttonShutDownServer.onClick.AddListener(ShutDownServer);
+        _buttonConnectClient.onClick.AddListener(Connect);
+        _buttonDisconnectClient.onClick.AddListener(Disconnect);
+        _buttonSendMessage.onClick.AddListener(SendMessage);
+        _inputField.onEndEdit.AddListener(text => SendMessage());
         _client.OnMessageReceive += ReceiveMessage;
     }
 
@@ -47,18 +49,31 @@ public class UIController : MonoBehaviour
         _server.ShutDownServer();
     
     private void Connect() =>    
-        _client.Connect();    
+        _client.Connect(_nameField.text);    
 
     private void Disconnect() =>    
         _client.Disconnect();    
 
     private void SendMessage()
     {
+        if (_inputField.text == "")
+            return;
+        
         _client.SendMessage(_inputField.text);
         _inputField.text = "";
     }
 
-    public void ReceiveMessage(object message) =>    
+    private void ReceiveMessage(object message) =>    
         _textField.ReceiveMessage(message);
     
+    private void OnDestroy()
+    {
+        _buttonStartServer.onClick.RemoveAllListeners();
+        _buttonShutDownServer.onClick.RemoveAllListeners();
+        _buttonConnectClient.onClick.RemoveAllListeners();
+        _buttonDisconnectClient.onClick.RemoveAllListeners();
+        _buttonSendMessage.onClick.RemoveAllListeners();
+        _inputField.onEndEdit.RemoveAllListeners();
+        _client.OnMessageReceive -= ReceiveMessage;
+    }
 }

@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
+using Messages;
 using UnityEngine;
 using UnityEngine.Networking;
 
@@ -16,7 +18,7 @@ public class Server : MonoBehaviour
     private bool _isStarted;
     private byte _error;
 
-    List<int> _connectionIDs = new List<int>();
+    Dictionary<int, string> _connectionIDs = new Dictionary<int, string>();
 
     public void StartServer()
     {        
@@ -46,6 +48,7 @@ public class Server : MonoBehaviour
         byte[] recBuffer = new byte[1024];
         int bufferSize = 1024;
         int dataSize;
+        string playerName;
         NetworkEventType recData = NetworkTransport.Receive(out recHostId, out connectionId, out channelId, recBuffer, bufferSize, out dataSize, out _error);
 
         while (recData != NetworkEventType.Nothing)
@@ -56,24 +59,46 @@ public class Server : MonoBehaviour
                     break;
 
                 case NetworkEventType.ConnectEvent:
-                    _connectionIDs.Add(connectionId);
+                    _connectionIDs.Add(connectionId, "");
 
                     SendMessageToAll($"Player {connectionId} has connected.");
                     Debug.Log($"Player {connectionId} has connected.");
+                    
+                    // var testMessage = new PlayerMessage()
+                    // {
+                    //     Name = "Palka",
+                    //     ConnectionId = connectionId,
+                    // };
+                    // SendMessage(testMessage, connectionId);
                     break;
 
                 case NetworkEventType.DataEvent:
                     string message = Encoding.Unicode.GetString(recBuffer, 0, dataSize);
 
-                    SendMessageToAll($"Player {connectionId}: {message}");
-                    Debug.Log($"Player {connectionId}: {message}");
+                    if (_connectionIDs.TryGetValue(connectionId, out playerName))
+                    {
+                        if (playerName == "")
+                        {
+                            _connectionIDs[connectionId] = message == "" ? connectionId.ToString() : message;
+                        }
+                        else
+                        {
+                            SendMessageToAll($"{playerName}: {message}");
+                            Debug.Log($"{playerName}: {message}");
+                        }
+                    }
+                    
                     break;
 
                 case NetworkEventType.DisconnectEvent:
-                    _connectionIDs.Remove(connectionId);
+                    if (_connectionIDs.TryGetValue(connectionId, out playerName))
+                    {
+                        _connectionIDs.Remove(connectionId);
 
-                    SendMessageToAll($"Player {connectionId} has disconnected.");
-                    Debug.Log($"Player {connectionId} has disconnected.");
+                        SendMessageToAll($"{playerName} has disconnected.");
+                        Debug.Log($"{playerName} has disconnected.");
+                    }
+
                     break;
 
                 case NetworkEventType.BroadcastEvent:
@@ -96,38 +121,34 @@ public class Server : MonoBehaviour
         Debug.Log($"Server {_hostID} has stopped");
     }
 
+    public void SendMessage<T>(T message, int connectionID) where T: IMessage
+    {
+        var json = JsonUtility.ToJson(message);
+        var buffer = BitConverter.GetBytes(message.MessageId);
+        buffer = buffer.Concat(Encoding.Unicode.GetBytes(json)).ToArray();
+        var size = sizeof(short) + json.Length * sizeof(char);
+        SendBytes(buffer, size, connectionID);
+    }
+
     public void SendMessage(string message, int connectionID)
     {
         byte[] buffer = Encoding.Unicode.GetBytes(message);
-        NetworkTransport.Send(_hostID, connectionID, _reliableChannel, buffer, message.Length * sizeof(char), out _error);
+        SendBytes(buffer, message.Length * sizeof(char), connectionID);
+    }
+
+    public void SendBytes(byte[] buffer, int size,  int connectionID)
+    {
+        //var byteLength = Buffer.ByteLength(buffer);
+        NetworkTransport.Send(_hostID, connectionID, _reliableChannel, buffer, size, out _error);
         if ((NetworkError)_error != NetworkError.Ok)
             Debug.Log((NetworkError)_error);
     }
 
     public void SendMessageToAll(string message)
     {
-        for (int i = 0; i < _connectionIDs.Count; i++)        
-            SendMessage(message, _connectionIDs[i]);        
+        foreach (var connectionID in _connectionIDs.Keys)
+        {
+            SendMessage(message, connectionID);
+        } 
     }
-}
-
-public interface Message
-{
-    short messageId { get; }
-}
-
-public class MyMessage: Message
-{
-    public string data;
-    public int number;
-
-    public short messageId => 0;
-}
-
-public class TheirMessage: Message
-{
-    public bool success;
-    public int number;
-
-    public short messageId => 2;
 }
